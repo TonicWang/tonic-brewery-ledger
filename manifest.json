@@ -1,0 +1,31 @@
+{
+  "name": "Tonic Brewery 釀酒帳本",
+  "short_name": "Tonic Brewery",
+  "description": "Tonic Brewery 收支記錄與財務報表系統",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#161210",
+  "theme_color": "#161210",
+  "lang": "zh-TW",
+  "categories": [
+    "finance",
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
