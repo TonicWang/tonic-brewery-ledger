@@ -1,0 +1,31 @@
+name = "tonic-sync-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-26"
+compatibility_flags = [ "nodejs_compat" ]
+upload_source_maps = true
+
+# Notion API version 2022-06-28 addresses databases by NOTION_LEDGER_DB.
+# Ledger data source id (not used by that API version): d883668d-acb4-4193-a98b-28f4e787aa00
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+
+[vars]
+NOTION_LEDGER_DB = "78d0d738-e30c-4e28-bf17-283f09b37530"
+NOTION_CRM_DB = "08bc823a-6704-4a5f-aa69-810f36e14574"
+ALLOWED_ORIGINS = "https://tonicwang.github.io"
+
+# NOTION_TOKEN and APP_PIN are secrets. Set them with:
+#   npx wrangler secret put NOTION_TOKEN
+#   npx wrangler secret put APP_PIN
+# Do not put those values in this file.
+[secrets]
+required = ["NOTION_TOKEN", "APP_PIN"]

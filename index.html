@@ -701,6 +701,46 @@ main {
 .settings-row .label.danger { color: var(--danger); }
 .settings-row .arrow { color: var(--text-mute); font-size: 18px; }
 
+.sync-panel { display: block; padding: 16px; cursor: default; }
+.sync-panel:active { background: transparent; }
+.sync-actions { display: flex; flex-direction: column; gap: 8px; }
+.btn-secondary {
+  width: 100%;
+  background: transparent;
+  color: var(--cream);
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn-secondary:active { background: var(--bg-elev); }
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--cream-dim);
+  margin: 2px 0 12px;
+}
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-mute);
+  flex: none;
+}
+.sync-dot.ok { background: var(--hop); }
+.sync-dot.pending { background: var(--amber); }
+.sync-dot.offline { background: var(--copper); }
+.sync-hint {
+  font-size: 11px;
+  color: var(--text-mute);
+  line-height: 1.5;
+  margin-top: 10px;
+}
+
 /* ====== Bottom Nav ====== */
 .bottom-nav {
   position: fixed;
@@ -1006,12 +1046,35 @@ body {
       </div>
     </div>
 
+    <div class="section-title" style="margin-top: 20px;">雲端同步</div>
+    <div class="settings-list">
+      <div class="sync-panel">
+        <div class="form-row">
+          <label for="syncWorkerUrl">Worker URL</label>
+          <input id="syncWorkerUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://tonic-sync-api.example.workers.dev">
+        </div>
+        <div class="form-row">
+          <label for="syncPin">PIN</label>
+          <input id="syncPin" type="password" autocomplete="off" placeholder="只存在這台裝置">
+        </div>
+        <div class="sync-status" id="syncStatus" role="status">
+          <span class="sync-dot" id="syncDot"></span>
+          <span id="syncStatusText">未設定</span>
+        </div>
+        <div class="sync-actions">
+          <button type="button" class="btn-secondary" id="syncSaveBtn">儲存同步設定</button>
+          <button type="button" class="btn-submit" id="syncUploadBtn" style="margin-top:0;">一次上傳全部本機資料</button>
+        </div>
+        <p class="sync-hint">沒填寫或連不上時，帳本仍只使用這台裝置的資料，不會擋住記帳。</p>
+      </div>
+    </div>
+
     <div class="section-title" style="margin-top: 20px;">關於</div>
     <div class="settings-list">
       <div class="settings-row" style="cursor: default;">
         <span class="label" style="font-size: 13px; color: var(--text-mute);">
           Tonic Brewery 釀酒帳本 Prototype v0.1<br>
-          <span style="font-size: 11px;">資料儲存於瀏覽器，請定期匯出備份</span>
+          <span style="font-size: 11px;">未設定雲端同步時，資料只在這台裝置，請定期匯出備份</span>
         </span>
       </div>
     </div>
@@ -1059,6 +1122,7 @@ body {
   </div>
 </div>
 
+<script src="sync.js"></script>
 <script>
 // ====== Storage 抽象層（使用瀏覽器 localStorage） ======
 const storage = {
@@ -1134,9 +1198,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
   updateCategoryOptions();
   initVoiceInput();
+  initSyncSettings();
   await loadAllTxs();
   updateMonthLabel();
   renderAll();
+  void syncInBackground();
 
   // 篩選 chip 事件
   document.querySelectorAll('#entityFilter .filter-chip').forEach(chip => {
@@ -1296,27 +1362,37 @@ function applyVoiceTranscript(text) {
 }
 
 // ====== 儲存與讀取 ======
+async function readAllStoredTxs() {
+  const result = await storage.list('tx:');
+  if (!result || !result.keys) return [];
+  const txs = [];
+  for (const key of result.keys) {
+    try {
+      const r = await storage.get(key);
+      if (r && r.value) txs.push(JSON.parse(r.value));
+    } catch (e) { /* skip */ }
+  }
+  return txs;
+}
+
 async function loadAllTxs() {
   try {
-    const result = await storage.list('tx:');
-    if (!result || !result.keys) {
-      allTxs = [];
-      return;
-    }
-    const txs = [];
-    for (const key of result.keys) {
-      try {
-        const r = await storage.get(key);
-        if (r && r.value) {
-          txs.push(JSON.parse(r.value));
-        }
-      } catch (e) { /* skip */ }
-    }
-    allTxs = txs.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    const txs = await readAllStoredTxs();
+    allTxs = txs
+      .filter(tx => !tx.deleted)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   } catch (err) {
     console.error('Load error', err);
     allTxs = [];
   }
+}
+
+async function writeTx(tx) {
+  const stored = { ...tx };
+  if (!stored.updatedAt) stored.updatedAt = new Date().toISOString();
+  const result = await storage.set(`tx:${stored.id}`, JSON.stringify(stored));
+  if (!result) throw new Error('儲存失敗');
+  return stored;
 }
 
 async function saveTx() {
@@ -1333,12 +1409,12 @@ async function saveTx() {
   const tx = {
     id: 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     date, type: currentType, entity, category, amount, hasInvoice, note,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    updatedAt: new Date().toISOString()
   };
 
   try {
-    const result = await storage.set(`tx:${tx.id}`, JSON.stringify(tx));
-    if (!result) throw new Error('儲存失敗');
+    const saved = await writeTx(tx);
     toast(`已記錄 ${currentType === 'income' ? '收入' : '支出'} $${amount.toLocaleString()}`);
 
     // 清空表單
@@ -1348,6 +1424,8 @@ async function saveTx() {
 
     await loadAllTxs();
     renderAll();
+    enqueuePush(saved);
+    void syncInBackground();
   } catch (err) {
     console.error(err);
     toast('儲存失敗，請重試', true);
@@ -1356,7 +1434,20 @@ async function saveTx() {
 
 async function deleteTx(id) {
   try {
-    await storage.delete(`tx:${id}`);
+    const configured = syncIsConfigured();
+    if (!configured) {
+      await storage.delete(`tx:${id}`);
+    } else {
+      const existing = allTxs.find(t => t.id === id) || { id };
+      const tombstone = await writeTx({
+        ...existing,
+        id,
+        deleted: true,
+        updatedAt: new Date().toISOString()
+      });
+      enqueuePush(tombstone);
+      void syncInBackground();
+    }
     toast('已刪除');
     await loadAllTxs();
     renderAll();
@@ -1574,6 +1665,194 @@ document.getElementById('modal').addEventListener('click', (e) => {
   if (e.target.id === 'modal') closeModal();
 });
 
+// ====== 雲端同步（沒設定或連不上時，全部略過） ======
+function syncLib() {
+  return typeof LedgerSync === 'undefined' ? null : LedgerSync;
+}
+
+function readSyncConfig() {
+  const api = syncLib();
+  try {
+    return {
+      workerUrl: localStorage.getItem(api ? api.URL_KEY : 'sync:workerUrl') || '',
+      pin: localStorage.getItem(api ? api.PIN_KEY : 'sync:pin') || ''
+    };
+  } catch (e) {
+    return { workerUrl: '', pin: '' };
+  }
+}
+
+function syncIsConfigured() {
+  const api = syncLib();
+  return !!(api && api.isConfigured(readSyncConfig()));
+}
+
+function readOutbox() {
+  const api = syncLib();
+  const key = api ? api.OUTBOX_KEY : 'sync:outbox';
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writeOutbox(items) {
+  const api = syncLib();
+  const key = api ? api.OUTBOX_KEY : 'sync:outbox';
+  try {
+    localStorage.setItem(key, JSON.stringify(items));
+  } catch (e) {
+    console.error('outbox write failed');
+  }
+}
+
+function enqueuePush(tx) {
+  const api = syncLib();
+  if (!api || !api.isConfigured(readSyncConfig())) return;
+  writeOutbox(api.enqueue(readOutbox(), {
+    op: tx.deleted ? 'delete' : 'upsert',
+    id: tx.id,
+    tx,
+    attempts: 0,
+    updatedAt: tx.updatedAt
+  }));
+}
+
+function setSyncStatus(text, kind) {
+  const label = document.getElementById('syncStatusText');
+  const dot = document.getElementById('syncDot');
+  if (label) label.textContent = text;
+  if (dot) dot.className = 'sync-dot' + (kind ? ' ' + kind : '');
+}
+
+function dedupeFallback(txs) {
+  const map = new Map();
+  txs.forEach(tx => { if (tx && tx.id) map.set(tx.id, tx); });
+  return Array.from(map.values());
+}
+
+let syncChain = Promise.resolve();
+
+function syncInBackground() {
+  const run = syncChain.then(() => doSync(), () => doSync());
+  syncChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+async function doSync() {
+  const api = syncLib();
+  const config = readSyncConfig();
+  if (!api || !api.isConfigured(config)) {
+    setSyncStatus('未設定', '');
+    return;
+  }
+  setSyncStatus('同步中', 'pending');
+  try {
+    const remote = await api.pullTxs(config, fetch);
+    const local = await readAllStoredTxs();
+    const remoteById = new Map(remote.map(tx => [tx.id, tx]));
+    let outbox = api.reconcileOutbox(readOutbox(), remoteById);
+    const merged = api.mergeTxs(local, remote, outbox);
+    await persistMerged(local, merged);
+    outbox = await api.flushOutbox(config, outbox, fetch);
+    writeOutbox(outbox);
+    await loadAllTxs();
+    renderAll();
+    setSyncStatus(outbox.length ? '等待重試' : '已同步', outbox.length ? 'pending' : 'ok');
+  } catch (err) {
+    setSyncStatus(err && err.status === 401 ? 'PIN 不正確' : '無法連線，使用本機資料', 'offline');
+  }
+}
+
+async function persistMerged(previous, merged) {
+  const prevById = new Map(previous.map(tx => [tx.id, tx]));
+  const nextIds = new Set();
+  for (const tx of merged) {
+    nextIds.add(tx.id);
+    const before = prevById.get(tx.id);
+    if (!before || JSON.stringify(before) !== JSON.stringify(tx)) {
+      await storage.set(`tx:${tx.id}`, JSON.stringify(tx));
+    }
+  }
+  for (const tx of previous) {
+    if (!nextIds.has(tx.id)) await storage.delete(`tx:${tx.id}`);
+  }
+}
+
+async function purgeTombstones() {
+  const stored = await readAllStoredTxs();
+  for (const tx of stored) {
+    if (tx.deleted) await storage.delete(`tx:${tx.id}`);
+  }
+}
+
+function initSyncSettings() {
+  const config = readSyncConfig();
+  const urlInput = document.getElementById('syncWorkerUrl');
+  const pinInput = document.getElementById('syncPin');
+  if (urlInput) urlInput.value = config.workerUrl || '';
+  if (pinInput) pinInput.value = config.pin || '';
+  const saveBtn = document.getElementById('syncSaveBtn');
+  const uploadBtn = document.getElementById('syncUploadBtn');
+  if (saveBtn) saveBtn.addEventListener('click', () => { void saveSyncSettings(); });
+  if (uploadBtn) uploadBtn.addEventListener('click', () => { void uploadAllLocal(); });
+  if (!syncIsConfigured()) setSyncStatus('未設定', '');
+}
+
+async function saveSyncSettings() {
+  const api = syncLib();
+  const urlKey = api ? api.URL_KEY : 'sync:workerUrl';
+  const pinKey = api ? api.PIN_KEY : 'sync:pin';
+  const urlInput = document.getElementById('syncWorkerUrl').value.trim();
+  const pinInput = document.getElementById('syncPin').value;
+  try {
+    localStorage.setItem(urlKey, urlInput);
+    localStorage.setItem(pinKey, pinInput);
+  } catch (e) {
+    toast('無法儲存設定', true);
+    return;
+  }
+  if (!syncIsConfigured()) {
+    await purgeTombstones();
+    writeOutbox([]);
+    await loadAllTxs();
+    renderAll();
+    setSyncStatus('未設定', '');
+    toast('已關閉雲端同步，帳本只留在這台裝置');
+    return;
+  }
+  toast('已儲存同步設定');
+  void syncInBackground();
+}
+
+async function uploadAllLocal() {
+  const api = syncLib();
+  const config = readSyncConfig();
+  if (!api || !api.isConfigured(config)) {
+    toast('請先儲存 Worker URL 與 PIN', true);
+    return;
+  }
+  const txs = (await readAllStoredTxs()).filter(tx => !tx.deleted);
+  setSyncStatus('同步中', 'pending');
+  try {
+    await api.bulkUpload(config, txs, fetch);
+    writeOutbox(readOutbox().filter(item => item.op === 'delete'));
+    await syncInBackground();
+    toast(`已上傳 ${txs.length} 筆`);
+  } catch (err) {
+    let outbox = readOutbox();
+    txs.forEach(tx => {
+      outbox = api.enqueue(outbox, { op: 'upsert', id: tx.id, tx, attempts: 1, updatedAt: tx.updatedAt });
+    });
+    writeOutbox(outbox);
+    setSyncStatus('無法連線，使用本機資料', 'offline');
+    toast('上傳失敗，已排入稍後重試', true);
+  }
+}
+
 // ====== 匯出 / 匯入 ======
 function exportCSV() {
   if (allTxs.length === 0) return toast('沒有資料可匯出', true);
@@ -1610,15 +1889,23 @@ async function importJSON(event) {
     const text = await file.text();
     const data = JSON.parse(text);
     if (!data.txs || !Array.isArray(data.txs)) throw new Error('格式錯誤');
+    const valid = data.txs.filter(tx => tx && tx.id && tx.date && tx.amount);
+    const deduped = syncLib() ? syncLib().dedupeById(valid) : dedupeFallback(valid);
+    const stored = await readAllStoredTxs();
+    const byId = new Map(stored.map(tx => [tx.id, tx]));
     let count = 0;
-    for (const tx of data.txs) {
-      if (tx.id && tx.date && tx.amount) {
-        await storage.set(`tx:${tx.id}`, JSON.stringify(tx));
-        count++;
-      }
+    for (const tx of deduped) {
+      const prev = byId.get(tx.id);
+      const chosen = prev && syncLib() ? syncLib().pickNewer(prev, tx) : tx;
+      if (prev && chosen === prev) continue;
+      const saved = await writeTx(chosen);
+      byId.set(saved.id, saved);
+      enqueuePush(saved);
+      count++;
     }
     await loadAllTxs();
     renderAll();
+    void syncInBackground();
     toast(`已匯入 ${count} 筆交易`);
   } catch (err) {
     toast('匯入失敗：' + err.message, true);
@@ -1634,10 +1921,18 @@ function confirmClear() {
     async () => {
       closeModal();
       try {
-        const result = await storage.list('tx:');
-        if (result && result.keys) {
-          for (const key of result.keys) {
-            await storage.delete(key);
+        const stored = await readAllStoredTxs();
+        if (syncIsConfigured()) {
+          for (const tx of stored) {
+            if (tx.deleted) continue;
+            const tombstone = await writeTx({ ...tx, deleted: true, updatedAt: new Date().toISOString() });
+            enqueuePush(tombstone);
+          }
+          void syncInBackground();
+        } else {
+          const result = await storage.list('tx:');
+          if (result && result.keys) {
+            for (const key of result.keys) await storage.delete(key);
           }
         }
         await loadAllTxs();
@@ -1680,13 +1975,20 @@ async function loadDemo() {
 
       let count = 0;
       for (const d of demos) {
-        const tx = { ...d, id: 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), createdAt: Date.now() };
-        await storage.set(`tx:${tx.id}`, JSON.stringify(tx));
+        const tx = {
+          ...d,
+          id: 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+          createdAt: Date.now(),
+          updatedAt: new Date().toISOString()
+        };
+        const saved = await writeTx(tx);
+        enqueuePush(saved);
         count++;
         await new Promise(r => setTimeout(r, 20));
       }
       await loadAllTxs();
       renderAll();
+      void syncInBackground();
       toast(`已載入 ${count} 筆示範資料`);
     }
   );

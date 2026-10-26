@@ -1,0 +1,4 @@
+sync-worker/node_modules/
+sync-worker/.wrangler/
+sync-worker/.dev.vars
+sync-worker/dist/
