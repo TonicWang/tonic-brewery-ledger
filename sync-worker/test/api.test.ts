@@ -129,7 +129,6 @@ describe("routes", () => {
     const body = await response.json();
     expect(filter).toEqual({
       and: [
-        { property: "外部ID", rich_text: { is_not_empty: true } },
         { property: "日期", date: { on_or_after: "2026-10-01" } },
         { property: "日期", date: { before: "2026-11-01" } },
       ],

@@ -1199,6 +1199,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateCategoryOptions();
   initVoiceInput();
   initSyncSettings();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') triggerAutomaticSync();
+  });
+  window.addEventListener('online', triggerAutomaticSync);
   await loadAllTxs();
   updateMonthLabel();
   renderAll();
@@ -1735,6 +1739,14 @@ function dedupeFallback(txs) {
 }
 
 let syncChain = Promise.resolve();
+let lastAutomaticSyncAt = 0;
+
+function triggerAutomaticSync() {
+  const now = Date.now();
+  if (now - lastAutomaticSyncAt < 30000) return;
+  lastAutomaticSyncAt = now;
+  void syncInBackground();
+}
 
 function syncInBackground() {
   const run = syncChain.then(() => doSync(), () => doSync());
