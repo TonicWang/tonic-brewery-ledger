@@ -948,7 +948,7 @@ body {
       <div class="form-row">
         <label>備註（選填）</label>
         <div class="note-with-mic">
-          <textarea id="txNote" placeholder="例如：黃金蕎麥代工案 / Sophie 設備款 / 萬能驗收尾款..."></textarea>
+          <textarea id="txNote" placeholder="例如：代工案尾款 / 設備款 / 驗收款..."></textarea>
           <button type="button" class="mic-btn" id="micBtn" onclick="toggleVoiceInput()" title="語音輸入">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
@@ -1949,7 +1949,7 @@ function confirmClear() {
 async function loadDemo() {
   openModal(
     '載入示範資料？',
-    '<div style="color: var(--cream-dim); font-size: 14px;">會新增約 12 筆 Tonic Brewery 典型交易（代工收入、原料採購、人力、稅務等），方便你看報表長相。不會覆蓋既有資料。</div>',
+    '<div style="color: var(--cream-dim); font-size: 14px;">會新增 12 筆虛構的示範交易（代工收入、原料採購、人力、稅務等，金額皆為假資料），方便你看報表長相。不會覆蓋既有資料。</div>',
     '載入',
     async () => {
       closeModal();
@@ -1957,20 +1957,20 @@ async function loadDemo() {
       const y = today.getFullYear();
       const m = String(today.getMonth() + 1).padStart(2, '0');
       const demos = [
-        // 收入
-        { date: `${y}-${m}-03`, type: 'income', entity: 'yapi', category: '代工收入', amount: 30000, hasInvoice: true, note: '黃金蕎麥代工案 300瓶開票部分' },
-        { date: `${y}-${m}-03`, type: 'income', entity: 'yapi', category: '代工收入', amount: 90000, hasInvoice: false, note: '黃金蕎麥代工案 1380瓶+400L未開票' },
-        { date: `${y}-${m}-08`, type: 'income', entity: 'yapi', category: '瓶裝啤酒銷售', amount: 14000, hasInvoice: true, note: 'NEIPA 批發 200瓶 給精釀店家' },
-        { date: `${y}-${m}-15`, type: 'income', entity: 'beerwang', category: '自釀材料銷售', amount: 8500, hasInvoice: true, note: '蝦皮訂單 5月中累計' },
-        { date: `${y}-${m}-20`, type: 'income', entity: 'taros', category: '設備銷售', amount: 504000, hasInvoice: true, note: 'Sophie 設備款' },
+        // 收入（以下皆為虛構示範資料）
+        { date: `${y}-${m}-03`, type: 'income', entity: 'yapi', category: '代工收入', amount: 10000, hasInvoice: true, note: '示範客戶A 代工案（有發票）' },
+        { date: `${y}-${m}-03`, type: 'income', entity: 'yapi', category: '代工收入', amount: 5000, hasInvoice: false, note: '示範客戶A 代工案（未開票）' },
+        { date: `${y}-${m}-08`, type: 'income', entity: 'yapi', category: '瓶裝啤酒銷售', amount: 3000, hasInvoice: true, note: '示範客戶B 批發' },
+        { date: `${y}-${m}-15`, type: 'income', entity: 'beerwang', category: '自釀材料銷售', amount: 2000, hasInvoice: true, note: '示範 網路訂單' },
+        { date: `${y}-${m}-20`, type: 'income', entity: 'taros', category: '設備銷售', amount: 10000, hasInvoice: true, note: '示範客戶C 設備款' },
         // 支出
-        { date: `${y}-${m}-02`, type: 'expense', entity: 'yapi', category: '原料-麥芽', amount: 13000, hasInvoice: true, note: '250kg 麥芽' },
-        { date: `${y}-${m}-02`, type: 'expense', entity: 'yapi', category: '原料-啤酒花', amount: 2300, hasInvoice: true, note: '1kg' },
-        { date: `${y}-${m}-05`, type: 'expense', entity: 'yapi', category: '人力-臨時工', amount: 1600, hasInvoice: false, note: '越南臨時工 1人 + 午餐' },
-        { date: `${y}-${m}-10`, type: 'expense', entity: 'yapi', category: '房租', amount: 50000, hasInvoice: true, note: '5月房租' },
-        { date: `${y}-${m}-10`, type: 'expense', entity: 'yapi', category: '電費', amount: 20000, hasInvoice: true, note: '5月電費' },
-        { date: `${y}-${m}-12`, type: 'expense', entity: 'yapi', category: '稅務-酒稅', amount: 17160, hasInvoice: false, note: '2000瓶酒稅 $8.58/瓶' },
-        { date: `${y}-${m}-18`, type: 'expense', entity: 'beerwang', category: '行銷廣告', amount: 3000, hasInvoice: true, note: '啤酒王品牌強化 5月預算' },
+        { date: `${y}-${m}-02`, type: 'expense', entity: 'yapi', category: '原料-麥芽', amount: 1000, hasInvoice: true, note: '示範 麥芽採購' },
+        { date: `${y}-${m}-02`, type: 'expense', entity: 'yapi', category: '原料-啤酒花', amount: 500, hasInvoice: true, note: '示範 啤酒花採購' },
+        { date: `${y}-${m}-05`, type: 'expense', entity: 'yapi', category: '人力-臨時工', amount: 500, hasInvoice: false, note: '示範 臨時工' },
+        { date: `${y}-${m}-10`, type: 'expense', entity: 'yapi', category: '房租', amount: 1000, hasInvoice: true, note: '示範 房租' },
+        { date: `${y}-${m}-10`, type: 'expense', entity: 'yapi', category: '電費', amount: 500, hasInvoice: true, note: '示範 電費' },
+        { date: `${y}-${m}-12`, type: 'expense', entity: 'yapi', category: '稅務-酒稅', amount: 500, hasInvoice: false, note: '示範 酒稅' },
+        { date: `${y}-${m}-18`, type: 'expense', entity: 'beerwang', category: '行銷廣告', amount: 500, hasInvoice: true, note: '示範 行銷廣告' },
       ];
 
       let count = 0;
