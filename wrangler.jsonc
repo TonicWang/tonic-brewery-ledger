@@ -1,0 +1,9 @@
+{
+  // 收支系統（純靜態網頁），由 Cloudflare Workers Static Assets 直接提供，不需要 build。
+  // 注意：sync-worker/ 是另一個獨立的 Worker，有自己的 wrangler.toml，不受這個檔案影響。
+  "name": "tonic-ledger",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "."
+  }
+}
