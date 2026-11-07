@@ -5,6 +5,7 @@ import {
   crmRecordToProperties,
   ledgerQueryFilter,
   ledgerTxToProperties,
+  listLedger,
   notionPageToCrmRecord,
   notionPageToLedgerTx,
   recordToCodeBlocks,
@@ -52,7 +53,7 @@ function asReadPage(id: string, properties: Record<string, any>, lastEdited: str
 }
 
 describe("ledger mapping", () => {
-  it("round-trips a transaction and keeps the subscript category", () => {
+  it("round-trips a transaction and keeps the subscript category", async () => {
     const tx = sampleTx();
     const properties = ledgerTxToProperties(tx);
     expect(properties["類別"]).toEqual({ select: { name: CO2 } });
@@ -65,7 +66,13 @@ describe("ledger mapping", () => {
     expect(textOf(properties["項目"] as { title: Array<{ text: { content: string } }> })).toBe("鋼瓶");
 
     const page = asReadPage("page-1", properties, "2026-10-26T03:04:05.000Z");
-    expect(notionPageToLedgerTx(page)).toEqual({
+    const deps: NotionDeps = {
+      token: "test-token",
+      fetch: async () => new Response("unexpected", { status: 500 }),
+      sleep: async () => undefined,
+      gate: zeroGate(),
+    };
+    expect(await notionPageToLedgerTx(deps, page)).toEqual({
       id: "tx_1",
       date: "2026-10-03",
       type: "expense",
@@ -84,10 +91,9 @@ describe("ledger mapping", () => {
     expect(textOf(properties["項目"] as { title: Array<{ text: { content: string } }> })).toBe(CO2);
   });
 
-  it("builds a month filter without dropping the external id", () => {
+  it("builds a month-only filter so rows without an external id are included", () => {
     expect(ledgerQueryFilter("2026-10")).toEqual({
       and: [
-        { property: "外部ID", rich_text: { is_not_empty: true } },
         { property: "日期", date: { on_or_after: "2026-10-01" } },
         { property: "日期", date: { before: "2026-11-01" } },
       ],
@@ -189,6 +195,56 @@ function zeroGate() {
 }
 
 describe("notion writes", () => {
+  it("assigns and persists an external id for a manually created ledger row", async () => {
+    const original = asReadPage(
+      "123e4567-e89b-12d3-a456-426614174000",
+      ledgerTxToProperties({ ...sampleTx(), id: "" }),
+      "2026-10-26T00:00:00.000Z",
+    );
+    const calls: Array<{ method: string; url: string; body: Record<string, any> }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      calls.push({ method, url, body });
+      if (url.endsWith("/query")) return Response.json({ results: [original], has_more: false });
+      if (method === "PATCH" && url.endsWith(`/pages/${original.id}`)) {
+        return Response.json({
+          ...original,
+          last_edited_time: "2026-10-26T00:01:00.000Z",
+          properties: { ...original.properties, 外部ID: { type: "rich_text", rich_text: [{ plain_text: "notion_123e4567e89b12d3a456426614174000" }] } },
+        });
+      }
+      return new Response("unexpected", { status: 500 });
+    };
+    const deps: NotionDeps = { token: "test-token", fetch: fetchImpl, sleep: async () => undefined, gate: zeroGate() };
+
+    const txs = await listLedger(deps, "ledger-db", "2026-10");
+
+    expect(txs).toHaveLength(1);
+    expect(txs[0]?.id).toBe("notion_123e4567e89b12d3a456426614174000");
+    const patch = calls.find((call) => call.method === "PATCH");
+    expect(patch?.body.properties["外部ID"].rich_text[0].text.content).toBe(
+      "notion_123e4567e89b12d3a456426614174000",
+    );
+  });
+
+  it("skips an invalid ledger type without assigning an external id", async () => {
+    const page = asReadPage("page-invalid", ledgerTxToProperties({ ...sampleTx(), id: "" }), "2026-10-26T00:00:00.000Z");
+    page.properties["類型"] = { type: "select", select: { name: "其他" } };
+    let patches = 0;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/query")) return Response.json({ results: [page], has_more: false });
+      if ((init?.method ?? "GET") === "PATCH") patches += 1;
+      return new Response("unexpected", { status: 500 });
+    };
+    const deps: NotionDeps = { token: "test-token", fetch: fetchImpl, sleep: async () => undefined, gate: zeroGate() };
+
+    expect(await listLedger(deps, "ledger-db", "2026-10")).toEqual([]);
+    expect(patches).toBe(0);
+  });
+
   it("updates an existing page instead of creating a second one", async () => {
     const calls: Array<{ method: string; url: string }> = [];
     const pages: Array<{ id: string; properties: Record<string, unknown>; last_edited_time: string }> = [];

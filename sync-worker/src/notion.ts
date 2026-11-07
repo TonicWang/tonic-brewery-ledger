@@ -280,27 +280,36 @@ function dateStart(properties: Record<string, unknown>, name: string): string | 
   return typeof start === "string" ? start : null;
 }
 
-export function notionPageToLedgerTx(page: NotionPage): LedgerTx | null {
-  const id = plain(page.properties, "外部ID");
-  if (!id) return null;
+export async function notionPageToLedgerTx(deps: NotionDeps, page: NotionPage): Promise<LedgerTx | null> {
   const type = labelToType(selectName(page.properties, "類型"));
   if (!type) return null;
-  const category = selectName(page.properties, "類別") ?? "";
-  const title = plain(page.properties, "項目");
-  const noteText = plain(page.properties, "備註");
+  let sourcePage = page;
+  let id = plain(page.properties, "外部ID");
+  if (!id) {
+    id = `notion_${page.id.replace(/-/g, "")}`;
+    sourcePage = (await notionRequest(deps, `/pages/${page.id}`, "PATCH", {
+      properties: { 外部ID: { rich_text: richText(id) } },
+    })) as unknown as NotionPage;
+  }
+  const properties = sourcePage.properties ?? page.properties;
+  const category = selectName(properties, "類別") ?? "";
+  const title = plain(properties, "項目");
+  const noteText = plain(properties, "備註");
   const note = noteText || (title && title !== category ? title : "");
   const tx: LedgerTx = {
     id,
-    date: dateOnly(dateStart(page.properties, "日期") ?? ""),
+    date: dateOnly(dateStart(properties, "日期") ?? ""),
     type,
-    entity: labelToEntity(selectName(page.properties, "業務體")),
+    entity: labelToEntity(selectName(properties, "業務體")),
     category,
-    amount: numberValue(page.properties, "金額") ?? 0,
-    hasInvoice: checkbox(page.properties, "有發票"),
+    amount: numberValue(properties, "金額") ?? 0,
+    hasInvoice: checkbox(properties, "有發票"),
     note,
-    deleted: checkbox(page.properties, "已刪除"),
+    deleted: checkbox(properties, "已刪除"),
   };
-  if (page.last_edited_time) tx.updatedAt = page.last_edited_time;
+  if (sourcePage.last_edited_time ?? page.last_edited_time) {
+    tx.updatedAt = sourcePage.last_edited_time ?? page.last_edited_time;
+  }
   return tx;
 }
 
@@ -407,12 +416,10 @@ export function monthRange(month: string): { start: string; end: string } {
 }
 
 export function ledgerQueryFilter(month?: string): Record<string, unknown> {
-  const externalId = { property: "外部ID", rich_text: { is_not_empty: true } };
-  if (!month) return externalId;
+  if (!month) return {};
   const range = monthRange(month);
   return {
     and: [
-      externalId,
       { property: "日期", date: { on_or_after: range.start } },
       { property: "日期", date: { before: range.end } },
     ],
@@ -516,7 +523,8 @@ async function queryAll(deps: NotionDeps, databaseId: string, filter: Record<str
   const pages: NotionPage[] = [];
   let cursor: string | undefined;
   do {
-    const body: Record<string, unknown> = { page_size: 100, filter };
+    const body: Record<string, unknown> = { page_size: 100 };
+    if (Object.keys(filter).length > 0) body.filter = filter;
     if (cursor) body.start_cursor = cursor;
     const data = await notionRequest(deps, `/databases/${databaseId}/query`, "POST", body);
     for (const item of data.results ?? []) {
@@ -563,10 +571,12 @@ async function replaceJsonCodeBlocks(deps: NotionDeps, pageId: string, blocks: C
 
 export async function listLedger(deps: NotionDeps, databaseId: string, month?: string): Promise<LedgerTx[]> {
   const pages = await queryAll(deps, databaseId, ledgerQueryFilter(month));
-  return pages.flatMap((page) => {
-    const tx = notionPageToLedgerTx(page);
-    return tx ? [tx] : [];
-  });
+  const txs: LedgerTx[] = [];
+  for (const page of pages) {
+    const tx = await notionPageToLedgerTx(deps, page);
+    if (tx) txs.push(tx);
+  }
+  return txs;
 }
 
 export async function upsertLedgerTx(deps: NotionDeps, databaseId: string, tx: LedgerTx): Promise<LedgerTx> {
@@ -575,7 +585,7 @@ export async function upsertLedgerTx(deps: NotionDeps, databaseId: string, tx: L
   const saved = existing[0]
     ? await notionRequest(deps, `/pages/${existing[0].id}`, "PATCH", { properties })
     : await notionRequest(deps, "/pages", "POST", { parent: { database_id: databaseId }, properties });
-  return notionPageToLedgerTx(saved as unknown as NotionPage) ?? { ...tx, updatedAt: tx.updatedAt };
+  return (await notionPageToLedgerTx(deps, saved as unknown as NotionPage)) ?? { ...tx, updatedAt: tx.updatedAt };
 }
 
 export async function softDeleteLedgerTx(deps: NotionDeps, databaseId: string, id: string): Promise<LedgerTx | null> {
@@ -585,9 +595,9 @@ export async function softDeleteLedgerTx(deps: NotionDeps, databaseId: string, i
   const saved = await notionRequest(deps, `/pages/${page.id}`, "PATCH", {
     properties: { 已刪除: { checkbox: true } },
   });
-  const parsed = notionPageToLedgerTx(saved as unknown as NotionPage);
+  const parsed = await notionPageToLedgerTx(deps, saved as unknown as NotionPage);
   if (parsed) return parsed;
-  const fallback = notionPageToLedgerTx(page);
+  const fallback = await notionPageToLedgerTx(deps, page);
   if (!fallback) return null;
   const edited = typeof saved.last_edited_time === "string" ? saved.last_edited_time : fallback.updatedAt;
   return { ...fallback, deleted: true, updatedAt: edited };
