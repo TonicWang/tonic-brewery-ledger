@@ -1,0 +1,238 @@
+openapi: 3.1.0
+info:
+  title: Tonic Blue
+  version: 0.1.0
+  description: |
+    Authenticated ledger API. Money is integer minor units (1 = 0.01 TWD).
+    Phone sessions are reader cookies. The assistant uses a Bearer token.
+    Nothing here is a claim that production is deployed or that phone, Notion, and the sheet match.
+servers:
+  - url: https://tonic-blue.example.workers.dev
+    description: Replace with the deployed Worker origin. Do not call a guessed host.
+components:
+  securitySchemes:
+    readerCookie:
+      type: apiKey
+      in: cookie
+      name: tonic_blue_session
+    assistantBearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Transaction:
+      type: object
+      required: [id, date, type, entity, category, amountCents, amount, currency]
+      properties:
+        id: { type: string }
+        date: { type: string, description: "YYYY-MM-DD" }
+        type: { type: string, enum: [income, expense] }
+        entity: { type: string, enum: [yapi, taros, beerwang, superhour, kaipi, personal] }
+        category: { type: string }
+        amountCents: { type: integer, minimum: 0, description: "2250 means 22.50 TWD" }
+        amount: { type: string, examples: ["22.50"] }
+        currency: { type: string, const: TWD }
+        hasInvoice: { type: ["boolean", "null"] }
+        note: { type: string }
+        createdAt: { type: ["string", "null"] }
+        createdAtMs: { type: ["integer", "null"] }
+        version: { type: integer }
+        voided: { type: boolean }
+    Obligation:
+      type: object
+      properties:
+        id: { type: string }
+        entity: { type: string }
+        item: { type: string }
+        cycle: { type: ["string", "null"] }
+        billedCents: { type: ["integer", "null"] }
+        paidCents: { type: ["integer", "null"] }
+        dueDate: { type: ["string", "null"], description: "null means unknown" }
+        futureMonthlyCents: { type: ["integer", "null"] }
+        note: { type: string }
+        enabled: { type: ["boolean", "null"] }
+        version: { type: integer }
+paths:
+  /api/v1/health:
+    get:
+      security: []
+      summary: Public readiness. Does not prove data is synced.
+      responses:
+        "200":
+          description: Status without ledger rows.
+  /api/v1/session:
+    post:
+      summary: Password login. Default role is reader.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+                role: { type: string, enum: [reader, owner] }
+      responses:
+        "200": { description: Sets HttpOnly cookie tonic_blue_session. }
+        "401": { description: unauthorized }
+        "429": { description: rate_limited }
+    delete:
+      summary: Revoke the cookie session.
+      responses:
+        "200": { description: Cookie cleared. }
+    get:
+      security: [{ readerCookie: [] }, { assistantBearer: [] }]
+      responses:
+        "200": { description: Current role. }
+        "401": { description: unauthorized }
+  /api/v1/transactions:
+    get:
+      security: [{ readerCookie: [] }, { assistantBearer: [] }]
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string }
+        - in: query
+          name: to
+          schema: { type: string }
+        - in: query
+          name: month
+          schema: { type: string }
+        - in: query
+          name: entity
+          schema: { type: string }
+        - in: query
+          name: scope
+          schema: { type: string, enum: [all, business, personal] }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: includeVoided
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200": { description: Ledger page. }
+        "401": { description: unauthorized }
+    post:
+      security: [{ assistantBearer: [] }]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Transaction" }
+      responses:
+        "201": { description: Created. }
+        "200": { description: Same id and payload already stored. }
+        "409": { description: id_conflict, duplicate_suspected, or idempotency_conflict. Existing row kept. }
+  /api/v1/transactions/{id}:
+    get:
+      security: [{ readerCookie: [] }, { assistantBearer: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: One transaction. }
+    put:
+      security: [{ assistantBearer: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion: { type: integer }
+                amount: { type: string }
+                amountCents: { type: integer }
+                note: { type: string }
+                voided: { type: boolean }
+      responses:
+        "200": { description: Updated, or unchanged when the payload matches. }
+        "409": { description: version_conflict. Live row unchanged. }
+  /api/v1/stats:
+    get:
+      security: [{ readerCookie: [] }, { assistantBearer: [] }]
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string }
+        - in: query
+          name: to
+          schema: { type: string }
+      responses:
+        "200":
+          description: Business totals exclude personal. Net is income minus expense, not a bank balance. Obligations are not included.
+  /api/v1/obligations:
+    get:
+      security: [{ readerCookie: [] }, { assistantBearer: [] }]
+      responses:
+        "200": { description: Planned register. Null fields are unknown. }
+    post:
+      security: [{ assistantBearer: [] }]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Created. Does not create a transaction. }
+  /api/v1/export:
+    get:
+      security: [{ readerCookie: [] }]
+      responses:
+        "200": { description: tonic-blue-1 backup. Assistant token cannot call this. }
+        "403": { description: forbidden }
+  /api/v1/migration/compare:
+    post:
+      security: [{ readerCookie: [] }, { assistantBearer: [] }]
+      responses:
+        "200": { description: Dry run. wrote is false. phoneCompleteness is unknown. }
+  /api/v1/migration/apply:
+    post:
+      security: [{ readerCookie: [] }]
+      description: Owner cookie only. Identical id and payload is a no-op. Divergent payload is parked. Canonical-only rows stay.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Non-destructive apply. }
+        "400": { description: migration_invalid. Nothing written. }
+        "403": { description: Reader and assistant are rejected. }
+  /api/v1/restore/stage:
+    post:
+      security: [{ readerCookie: [] }]
+      description: Owner only. Stores a batch and does not change live transactions.
+      responses:
+        "200": { description: Staged. }
+  /api/v1/restore/{id}/commit:
+    post:
+      security: [{ readerCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Applies the staged file with the same non-destructive rules. }
+security:
+  - readerCookie: []
+  - assistantBearer: []

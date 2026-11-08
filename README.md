@@ -2,6 +2,12 @@
 
 收入支出系統。帳本預設只把資料放在這台裝置的瀏覽器。設定雲端同步之後，會透過 Cloudflare Worker 寫進 Notion：手機上改一筆，或直接在 Notion 改一列，下次讀取都會拿到較新的那筆。
 
+## Tonic Blue（還沒切換）
+
+`cloud/` 是下一版雲端帳本：手機只讀、帳目以 Cloudflare D1 為準、助理用另一組憑證寫入。說明在 [docs/tonic-blue.md](docs/tonic-blue.md)。
+
+這一版**還沒部署，也還沒取代這個網站**。現在的手機帳本、localStorage、選用的 Notion 同步、Google Sheet / Drive 備份都還在。不要把 `cloud/` 裡的測試數字當成真實帳。
+
 這個倉庫是公開的。`NOTION_TOKEN` 與 `APP_PIN` 只能放在 Cloudflare 的 secret，或你自己手機的瀏覽器裡。不要寫進檔案、不要貼到 commit、issue 或 pull request。
 
 ## 雲端同步
