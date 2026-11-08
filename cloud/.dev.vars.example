@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local `wrangler dev` only. .dev.vars is gitignored.
+# These are placeholders, not usable secrets. Generate your own values.
+# OWNER_PASSWORD must be at least 12 characters and must not be a short numeric PIN.
+# ASSISTANT_TOKEN must be at least 32 characters and must not be all digits.
+OWNER_PASSWORD=replace-with-a-long-passphrase
+ASSISTANT_TOKEN=replace-with-32-plus-random-characters
+APP_MODE=local-test

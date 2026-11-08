@@ -1,0 +1,49 @@
+{
+  // Tonic Blue — separate Worker from the existing static site (repo-root wrangler.jsonc)
+  // and from sync-worker/ (Notion PIN sync). Deploying this does not replace either.
+  //
+  // database_id is a placeholder so Wrangler will not auto-provision a database.
+  // Replace it with the id from `npx wrangler d1 create tonic-blue` before any deploy.
+  // This repository does not deploy itself. See docs/tonic-blue.md.
+  "name": "tonic-blue",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tonic-blue",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Comma-separated extra browser origins. Empty means same-origin only.
+  // Do not add the public GitHub Pages origin unless you intend that site to call this API.
+  "vars": {
+    "ALLOWED_ORIGINS": "",
+    "APP_MODE": "unverified"
+  },
+  // Set with `npx wrangler secret put`, never in this file:
+  //   OWNER_PASSWORD
+  //   ASSISTANT_TOKEN
+  "secrets": {
+    "required": ["OWNER_PASSWORD", "ASSISTANT_TOKEN"]
+  }
+}

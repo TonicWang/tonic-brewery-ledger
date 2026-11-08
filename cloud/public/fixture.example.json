@@ -1,0 +1,18 @@
+{
+  "label": "TEST EXAMPLE SYNTHETIC — not a real ledger",
+  "transactions": [
+    {"id":"tx_example_oct","date":"2026-10-15","type":"income","entity":"yapi","entityLabel":"雅啤精釀","category":"瓶裝啤酒銷售","amountCents":10000,"hasInvoice":true,"note":"EXAMPLE 上月瓶裝","voided":false},
+    {"id":"tx_example_labor","date":"2026-11-03","type":"income","entity":"yapi","entityLabel":"雅啤精釀","category":"代工收入","amountCents":2250,"hasInvoice":true,"note":"EXAMPLE 代工 22.50","voided":false},
+    {"id":"tx_example_malt","date":"2026-11-04","type":"expense","entity":"yapi","entityLabel":"雅啤精釀","category":"原料-麥芽","amountCents":2250,"hasInvoice":true,"note":"EXAMPLE 麥芽 22.50","voided":false},
+    {"id":"tx_example_rent_part","date":"2026-11-06","type":"expense","entity":"yapi","entityLabel":"雅啤精釀","category":"房租","amountCents":1050,"hasInvoice":true,"note":"EXAMPLE 部分房租 10.50","voided":false},
+    {"id":"tx_example_gear","date":"2026-11-02","type":"income","entity":"taros","entityLabel":"塔羅斯Talos","category":"設備銷售","amountCents":5000,"hasInvoice":true,"note":"EXAMPLE 設備 50.00","voided":false},
+    {"id":"tx_example_ad","date":"2026-11-09","type":"expense","entity":"beerwang","entityLabel":"啤酒王","category":"行銷廣告","amountCents":250,"hasInvoice":false,"note":"EXAMPLE 廣告 2.50","voided":false},
+    {"id":"tx_example_food","date":"2026-11-11","type":"income","entity":"superhour","entityLabel":"超時餐飲","category":"餐飲收入","amountCents":800,"hasInvoice":true,"note":"EXAMPLE 超時 8.00","voided":false},
+    {"id":"tx_example_water","date":"2026-11-12","type":"expense","entity":"kaipi","entityLabel":"開啤","category":"水費","amountCents":300,"hasInvoice":true,"note":"EXAMPLE 開啤水費 3.00","voided":false},
+    {"id":"tx_example_personal","date":"2026-11-08","type":"expense","entity":"personal","entityLabel":"日常生活支出","category":"日常生活支出","amountCents":100,"hasInvoice":false,"note":"EXAMPLE 個人 1.00","voided":false}
+  ],
+  "obligations": [
+    {"id":"ob_example_rent","entity":"yapi","entityLabel":"雅啤精釀","item":"房租","cycle":null,"billedCents":100050,"paidCents":null,"dueDate":null,"futureMonthlyCents":100050,"note":"EXAMPLE 到期日與本次實付都未知","enabled":true,"version":1},
+    {"id":"ob_example_power","entity":"taros","entityLabel":"塔羅斯Talos","item":"電費","cycle":"每月","billedCents":0,"paidCents":0,"dueDate":null,"futureMonthlyCents":null,"note":"EXAMPLE 啟用狀態未知，0 是真的零不是空白","enabled":null,"version":1}
+  ]
+}
